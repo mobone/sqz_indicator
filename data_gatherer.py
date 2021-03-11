@@ -24,7 +24,10 @@ class stock:
         self.get_market_cap()
         self.get_ta()
         self.get_trades()
-        self.trades = pd.DataFrame(self.trades, columns = ['Symbol', 'Start Date', 'End Date', 'Change'])
+
+        self.trades = pd.DataFrame(self.trades, columns = ['Symbol', 'Start Date', 'End Date', 'Buy Price', 'Sell Price', 'Change'])
+
+        self.trades['Market Cap'] = self.market_cap
         #print(self.trades)
 
 
@@ -50,15 +53,15 @@ class stock:
             self.market_cap = float(self.market_cap[:-1])*1000
 
         if self.market_cap>mega:
-            self.market_cap = 'mega'
+            self.market_cap = 'Mega'
         elif self.market_cap>large and self.market_cap<mega:
-            self.market_cap = 'large'
+            self.market_cap = 'Large'
         elif self.market_cap<large and self.market_cap>mid:
-            self.market_cap = 'mid'
+            self.market_cap = 'Mid'
         elif self.market_cap<mid and self.market_cap>small:
-            self.market_cap = 'small'
+            self.market_cap = 'Small'
         else:
-            self.market_cap = 'micro'
+            self.market_cap = 'Micro'
 
         #print(self.market_cap)
 
@@ -80,15 +83,20 @@ class stock:
             if start_trading == False:
                 continue
 
+            cur_price = row['close']
             if cur_pos is None and row['SQZ_ON'] == 0:
                 # buy
-                cur_pos = [key, row['close']]
+                cur_pos = {'buy_date': key, 'buy_price': cur_price}
 
             if cur_pos is not None and row['SQZ_ON'] == 1:
                 # sell
-                percent_change = (row['close'] - cur_pos[1]) / cur_pos[1]
-                self.trades.append([self.ticker, cur_pos[0], key, percent_change])
+                cur_pos['sell_date'] = key
+                cur_pos['sell_price'] = cur_price
+                percent_change = (cur_pos['sell_price'] - cur_pos['buy_price']) / cur_pos['buy_price']
+                self.trades.append([self.ticker, cur_pos['buy_date'], cur_pos['sell_date'], cur_pos['buy_price'], cur_pos['sell_price'], percent_change])
                 cur_pos = None
+
+
 
 def stock_wrapper(ticker):
     try:
@@ -96,11 +104,15 @@ def stock_wrapper(ticker):
     except Exception as e:
         print(ticker, '\t', e)
         return None
-    print(ticker, '\tDone\t', stock_class.market_cap)
+    #print(stock_class.trades)
+    print(ticker)
     return stock_class.trades
 
 if __name__ == '__main__':
     companies = pd.read_csv('companies.csv')
     tickers = list(companies['Symbol'].values)
     with Pool(16) as p:
-        p.map(stock_wrapper, tickers)
+        trades = p.map(stock_wrapper, tickers)
+
+    all_trades = pd.concat(trades)
+    all_trades.to_csv('all_trades.csv')
